@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Neo-Brutal Notes Sync</title>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+    
+    <style>
+        :root {
+            --bg: #ffffff;
+            --primary: #bc95ff; 
+            --accent: #d4ff00;  
+            --danger: #ff5252;
+            --black: #000000;
+            --white: #ffffff;
+            --border: 4px solid #000000;
+            --shadow: 6px 6px 0px #000000;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            margin: 0; padding: 0;
+            background-color: var(--bg);
+            background-image: radial-gradient(#a2d2ff 1.5px, transparent 1.5px);
+            background-size: 25px 25px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        /* HEADER */
+        .header {
+            background: var(--white); border-bottom: var(--border);
+            padding: 10px 15px; display: flex; align-items: center; justify-content: space-between;
+            position: sticky; top: 0; z-index: 1000; height: 70px;
+        }
+
+        .icon-btn {
+            background: var(--accent); border: var(--border);
+            box-shadow: 3px 3px 0px var(--black);
+            width: 45px; height: 45px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px; font-weight: bold;
+        }
+
+        /* SIDEBAR */
+        .sidebar {
+            position: fixed; left: -310px; top: 0; width: 300px; height: 100%;
+            background: var(--primary); border-right: var(--border);
+            transition: 0.3s ease; z-index: 2000; padding: 20px; overflow-y: auto;
+        }
+        #menu-toggle:checked ~ .sidebar { left: 0; }
+        #menu-toggle { display: none; }
+
+        .side-nav-top { display: flex; gap: 10px; margin-bottom: 20px; }
+
+        .side-btn {
+            display: block; width: 100%; padding: 12px; margin-bottom: 15px;
+            background: var(--white); border: var(--border);
+            box-shadow: 4px 4px 0px var(--black);
+            font-weight: 900; cursor: pointer; text-align: left;
+        }
+
+        .btn-small { width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+
+        /* KATEGORI ACCORDION */
+        .cat-dropdown { display: none; padding-left: 15px; margin-bottom: 15px; }
+        .cat-dropdown.active { display: block; }
+
+        /* NOTE CARD */
+        .note-card {
+            background: var(--white); border: var(--border);
+            padding: 15px; margin-bottom: 15px;
+            box-shadow: var(--shadow); position: relative; cursor: pointer;
+        }
+        .note-header { display: flex; justify-content: space-between; align-items: center; }
+        .note-title { font-weight: 900; font-size: 16px; text-transform: uppercase; }
+        .note-body-text { 
+            font-size: 14px; margin-top: 10px; border-top: 2px solid black; 
+            padding-top: 10px; display: none; white-space: pre-wrap;
+        }
+        .note-card.active .note-body-text { display: block; }
+
+        /* MODAL */
+        .modal-overlay {
+            position: fixed; top:0; left:0; width:100%; height:100%;
+            background: rgba(0,0,0,0.7); z-index: 3000;
+            display: none; align-items: center; justify-content: center;
+        }
+        .modal-card {
+            background: white; border: var(--border); padding: 20px;
+            width: 85%; max-width: 400px; box-shadow: 8px 8px 0px var(--black);
+            text-align: center;
+        }
+
+        .search-box {
+            width: 100%; border: var(--border); padding: 10px;
+            margin-bottom: 15px; font-weight: bold; outline: none;
+            display: none;
+        }
+        .search-box.active { display: block; }
+
+        .container { padding: 20px; max-width: 600px; margin: 0 auto; }
+        .hidden { display: none !important; }
+        .pinned { border-color: var(--danger); background: #fff5f5; }
+
+        /* DOT MENU */
+        .dot-menu-btn { background: none; border: none; font-size: 22px; cursor: pointer; font-weight: bold; }
+        .note-dropdown {
+            position: absolute; right: 10px; top: 45px;
+            background: white; border: 3px solid black;
+            box-shadow: 4px 4px 0px black; z-index: 100;
+            display: none; width: 100px;
+        }
+        .note-dropdown.active { display: block; }
+        .drop-item { padding: 8px; border-bottom: 2px solid black; font-size: 11px; font-weight: bold; cursor: pointer; }
+        
+        .status-pill { font-size: 10px; text-align: center; margin-bottom: 10px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div id="modal-overlay" class="modal-overlay">
+        <div class="modal-card">
+            <h3 id="modal-msg">KONFIRMASI</h3>
+            <p id="modal-submsg"></p>
+            <div style="display:flex; gap:10px; margin-top:20px;">
+                <button class="side-btn" style="margin:0; flex:1;" onclick="closeModal()">BATAL</button>
+                <button id="modal-confirm" class="side-btn" style="margin:0; background:var(--danger); color:white; flex:1;">YA</button>
+            </div>
+        </div>
+    </div>
+
+    <input type="checkbox" id="menu-toggle">
+    
+    <div class="sidebar">
+        <div class="side-nav-top">
+            <button class="side-btn btn-small" style="background: var(--danger); color:white;" onclick="closeMenu()">✖</button>
+            <button class="side-btn" style="flex:1; background: var(--accent); font-size:13px;" onclick="addNewCategory()">➕ TAMBAH KATEGORI</button>
+        </div>
+
+        <button class="side-btn" onclick="showPage('home')">🏠 TULIS BARU</button>
+        <button class="side-btn" onclick="showPage('all')">📂 SEMUA CATATAN</button>
+        <button class="side-btn" onclick="toggleCatMenu()">📂 KATEGORI ▼</button>
+        <div id="cat-list" class="cat-dropdown"></div>
+
+        <hr style="border: 2px solid black; margin: 20px 0;">
+        <button class="side-btn" onclick="showPage('settings')" style="background: #a2d2ff;">⚙️ PENGATURAN</button>
+    </div>
+
+    <header class="header">
+        <label for="menu-toggle" class="icon-btn">☰</label>
+        <h2 id="view-title" style="margin:0; font-size: 16px; font-weight: 900;">SEMUA CATATAN</h2>
+        <button class="icon-btn" onclick="toggleSearch()" style="background: var(--primary);">🔍</button>
+    </header>
+
+    <div class="container">
+        <div id="cloud-indicator" class="status-pill">MENGHUBUNGKAN KE CLOUD...</div>
+        <input type="text" id="search-input" class="search-box" placeholder="Cari judul..." oninput="render()">
+
+        <div id="p-home" class="hidden">
+            <div style="background:white; border:var(--border); padding:20px; box-shadow:var(--shadow);">
+                <input type="text" id="n-title" placeholder="JUDUL..." style="width:100%; border:var(--border); padding:12px; margin-bottom:15px; font-weight:bold; outline:none;">
+                <textarea id="n-body" placeholder="ISI CATATAN..." style="width:100%; border:var(--border); padding:12px; height:150px; margin-bottom:15px; font-weight:bold; outline:none;"></textarea>
+                <button onclick="save()" class="side-btn" style="background:var(--accent); text-align:center; width:100%;">SIMPAN KE CLOUD</button>
+            </div>
+        </div>
+
+        <div id="p-list">
+            <div id="notes-grid"></div>
+        </div>
+
+        <div id="p-settings" class="hidden">
+            <div style="background:white; border:var(--border); padding:20px; box-shadow:var(--shadow);">
+                <h3 style="background:black; color:white; padding:5px; text-align:center;">DATABASE INFO</h3>
+                <p style="font-size:10px; word-break:break-all; font-weight:bold;">URL: catatankuhh-default-rtdb.asia-southeast1.firebasedatabase.app</p>
+                
+                <hr style="border: 2px solid black; margin: 20px 0;">
+                <h3 style="color:var(--danger);">ZONA BAHAYA</h3>
+                <button class="side-btn" style="background:var(--danger); color:white; text-align:center;" onclick="askResetAll()">🔥 HAPUS SEMUA DATA CLOUD</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- KONFIGURASI FIREBASE ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyC1NOaRtNd-pvn2reIhjUeHrjrzeDVkzjE",
+            authDomain: "catatankuhh.firebaseapp.com",
+            projectId: "catatankuhh",
+            databaseURL: "https://catatankuhh-default-rtdb.asia-southeast1.firebasedatabase.app",
+            storageBucket: "catatankuhh.firebasestorage.app",
+            messagingSenderId: "991839415043",
+            appId: "1:991839415043:web:61e6f93d4a57dcb7e59736"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        // --- STATE DATA ---
+        let cats = JSON.parse(localStorage.getItem('cats_db')) || ["Akun", "Jadwal", "Doa", "Kegiatan"];
+        let db_cloud = []; // Data akan diambil dari Firebase
+        let currentFilter = null;
+
+        // --- CEK KONEKSI ---
+        database.ref(".info/connected").on("value", (snap) => {
+            const ind = document.getElementById('cloud-indicator');
+            if (snap.val() === true) {
+                ind.innerText = "🟢 TERHUBUNG KE CLOUD"; ind.style.color = "green";
+            } else {
+                ind.innerText = "🔴 OFFLINE / RECONNECTING..."; ind.style.color = "red";
+            }
+        });
+
+        // --- AMBIL DATA REALTIME ---
+        database.ref('notes_v7').on('value', (snapshot) => {
+            const data = snapshot.val();
+            db_cloud = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
+            render();
+        });
+
+        function showPage(p, f = null) {
+            document.getElementById('p-home').classList.add('hidden');
+            document.getElementById('p-list').classList.add('hidden');
+            document.getElementById('p-settings').classList.add('hidden');
+            closeMenu();
+            currentFilter = f;
+            if(p === 'home') {
+                document.getElementById('p-home').classList.remove('hidden');
+                document.getElementById('view-title').innerText = 'TULIS BARU';
+            } else if(p === 'settings') {
+                document.getElementById('p-settings').classList.remove('hidden');
+                document.getElementById('view-title').innerText = 'PENGATURAN';
+            } else {
+                document.getElementById('p-list').classList.remove('hidden');
+                document.getElementById('view-title').innerText = f ? f.toUpperCase() : 'SEMUA CATATAN';
+                render();
+            }
+        }
+
+        function toggleCatMenu() { document.getElementById('cat-list').classList.toggle('active'); }
+        function closeMenu() { document.getElementById('menu-toggle').checked = false; }
+        function toggleSearch() { document.getElementById('search-input').classList.toggle('active'); }
+
+        function addNewCategory() {
+            let n = prompt("Nama Kategori Baru:");
+            if(n && !cats.includes(n)) {
+                cats.push(n);
+                localStorage.setItem('cats_db', JSON.stringify(cats));
+                updateSide();
+            }
+        }
+
+        function save() {
+            let t = document.getElementById('n-title').value;
+            let b = document.getElementById('n-body').value;
+            if(!t || !b) return;
+            
+            let cat = "Lainnya";
+            cats.forEach(c => { if(t.toLowerCase().includes(c.toLowerCase())) cat = c; });
+
+            // Simpan ke Firebase
+            database.ref('notes_v7').push({
+                t, b, cat, 
+                pinned: false,
+                timestamp: Date.now()
+            }).then(() => {
+                document.getElementById('n-title').value = '';
+                document.getElementById('n-body').value = '';
+                showPage('all');
+            });
+        }
+
+        function render() {
+            let container = document.getElementById('notes-grid');
+            let search = document.getElementById('search-input').value.toLowerCase();
+            container.innerHTML = "";
+            
+            let data = [...db_cloud];
+            if(currentFilter) data = data.filter(n => n.cat === currentFilter);
+            if(search) data = data.filter(n => n.t.toLowerCase().includes(search));
+            
+            data.sort((a, b) => b.pinned - a.pinned || b.timestamp - a.timestamp);
+
+            data.forEach(n => {
+                container.innerHTML += `
+                    <div class="note-card ${n.pinned ? 'pinned' : ''}" onclick="this.classList.toggle('active')">
+                        <div class="note-header">
+                            <div class="note-title">${n.pinned ? '📌 ' : ''}${n.t}</div>
+                            <button class="dot-menu-btn" onclick="event.stopPropagation(); toggleNoteMenu('${n.id}')">⋮</button>
+                        </div>
+                        <div id="menu-${n.id}" class="note-dropdown">
+                            <div class="drop-item" onclick="event.stopPropagation(); pinNote('${n.id}', ${n.pinned})">${n.pinned ? 'UNPIN' : 'PIN'}</div>
+                            <div class="drop-item" onclick="event.stopPropagation(); askDelete('${n.id}')" style="color:red;">HAPUS</div>
+                        </div>
+                        <div class="note-body-text">${n.b} <br><br> <small style="background:var(--primary); padding:2px;"># ${n.cat}</small></div>
+                    </div>`;
+            });
+            updateSide();
+        }
+
+        function pinNote(id, currentStatus) {
+            database.ref('notes_v7/' + id).update({ pinned: !currentStatus });
+        }
+
+        function askDelete(id) {
+            let modal = document.getElementById('modal-overlay');
+            document.getElementById('modal-msg').innerText = "HAPUS CATATAN?";
+            document.getElementById('modal-submsg').innerText = "Catatan akan hilang dari Cloud selamanya.";
+            modal.style.display = 'flex';
+            document.getElementById('modal-confirm').onclick = () => {
+                database.ref('notes_v7/' + id).remove();
+                closeModal();
+            };
+        }
+
+        function askResetAll() {
+            let modal = document.getElementById('modal-overlay');
+            document.getElementById('modal-msg').innerText = "KOSONGKAN CLOUD?";
+            document.getElementById('modal-submsg').innerText = "Semua catatan di database akan dihapus!";
+            modal.style.display = 'flex';
+            document.getElementById('modal-confirm').onclick = () => {
+                database.ref('notes_v7').remove();
+                closeModal();
+            };
+        }
+
+        function closeModal() { document.getElementById('modal-overlay').style.display = 'none'; }
+        
+        function toggleNoteMenu(id) {
+            document.querySelectorAll('.note-dropdown').forEach(el => {
+                if(el.id !== 'menu-'+id) el.classList.remove('active');
+            });
+            document.getElementById('menu-'+id).classList.toggle('active');
+        }
+
+        function updateSide() {
+            let div = document.getElementById('cat-list');
+            div.innerHTML = "";
+            cats.forEach(c => {
+                div.innerHTML += `<button class="side-btn" style="font-size:12px; margin-bottom:5px;" onclick="showPage('list', '${c}')"># ${c.toUpperCase()}</button>`;
+            });
+        }
+
+        window.onclick = (e) => { 
+            if (!e.target.matches('.dot-menu-btn')) 
+                document.querySelectorAll('.note-dropdown').forEach(el => el.classList.remove('active')); 
+        }
+
+        updateSide();
+        render();
+    </script>
+</body>
+</html>
